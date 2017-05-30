@@ -19,18 +19,19 @@
 #include <signal.h>
 
 struct monitor {
-	int count;
+	int count; //工作线程数量
 	struct skynet_monitor ** m;
-	pthread_cond_t cond;
-	pthread_mutex_t mutex;
+	pthread_cond_t cond; //条件变量
+	pthread_mutex_t mutex; //互斥锁
 	int sleep;
 	int quit;
 };
 
+//工作线程的参数，monitor
 struct worker_parm {
-	struct monitor *m;
-	int id;
-	int weight;
+	struct monitor *m; //monitor
+	int id; //第几个工作线程
+	int weight; //权重
 };
 
 static int SIG = 0;
@@ -44,6 +45,7 @@ handle_hup(int signal) {
 
 #define CHECK_ABORT if (skynet_context_total()==0) break;
 
+//创建线程
 static void
 create_thread(pthread_t *thread, void *(*start_routine) (void *), void *arg) {
 	if (pthread_create(thread,NULL, start_routine, arg)) {
@@ -77,6 +79,7 @@ thread_socket(void *p) {
 	return NULL;
 }
 
+//释放monitor
 static void
 free_monitor(struct monitor *m) {
 	int i;
@@ -187,24 +190,26 @@ start(int thread) {
 	m->count = thread;
 	m->sleep = 0;
 
+	//分配指针的大小
 	m->m = skynet_malloc(thread * sizeof(struct skynet_monitor *));
 	int i;
 	for (i=0;i<thread;i++) {
-		m->m[i] = skynet_monitor_new();
+		m->m[i] = skynet_monitor_new(); //指针指向skynet_monitor
 	}
-	if (pthread_mutex_init(&m->mutex, NULL)) {
+	if (pthread_mutex_init(&m->mutex, NULL)) { //初始化互斥锁
 		fprintf(stderr, "Init mutex error");
 		exit(1);
 	}
-	if (pthread_cond_init(&m->cond, NULL)) {
+	if (pthread_cond_init(&m->cond, NULL)) { //初始化条件变量
 		fprintf(stderr, "Init cond error");
 		exit(1);
 	}
 
-	create_thread(&pid[0], thread_monitor, m);
-	create_thread(&pid[1], thread_timer, m);
-	create_thread(&pid[2], thread_socket, m);
+	create_thread(&pid[0], thread_monitor, m); //创建monitor线程
+	create_thread(&pid[1], thread_timer, m); //创建timer线程
+	create_thread(&pid[2], thread_socket, m); //创建socket线程
 
+	//创建thread个工作线程
 	static int weight[] = { 
 		-1, -1, -1, -1, 0, 0, 0, 0,
 		1, 1, 1, 1, 1, 1, 1, 1, 
@@ -222,21 +227,27 @@ start(int thread) {
 		create_thread(&pid[i+3], thread_worker, &wp[i]);
 	}
 
+	//对非工作线程的三个线程进行回收
 	for (i=0;i<thread+3;i++) {
 		pthread_join(pid[i], NULL); 
 	}
 
+	//释放monitor
 	free_monitor(m);
 }
 
+//启动bootstrap服务
+//logger服务
+//cmdline = "snlua bootstrap"
 static void
 bootstrap(struct skynet_context * logger, const char * cmdline) {
 	int sz = strlen(cmdline);
 	char name[sz+1];
 	char args[sz+1];
-	sscanf(cmdline, "%s %s", name, args);
-	struct skynet_context *ctx = skynet_context_new(name, args);
+	sscanf(cmdline, "%s %s", name, args); //name="snlua" args="bootstrap"
+	struct skynet_context *ctx = skynet_context_new(name, args); //开启snlua服务
 	if (ctx == NULL) {
+		//创建失败，退出
 		skynet_error(NULL, "Bootstrap error : %s\n", cmdline);
 		skynet_context_dispatchall(logger);
 		exit(1);
@@ -252,25 +263,28 @@ skynet_start(struct skynet_config * config) {
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGHUP, &sa, NULL);
 
+	//后台启动处理
 	if (config->daemon) {
 		if (daemon_init(config->daemon)) {
 			exit(1);
 		}
 	}
-	skynet_harbor_init(config->harbor);
-	skynet_handle_init(config->harbor);
-	skynet_mq_init();
-	skynet_module_init(config->module_path);
-	skynet_timer_init();
-	skynet_socket_init();
-	skynet_profile_enable(config->profile);
+	skynet_harbor_init(config->harbor); //初始化harbor
+	skynet_handle_init(config->harbor); //初始化handle
+	skynet_mq_init(); //初始化消息队列
+	skynet_module_init(config->module_path); //初始化服务模块
+	skynet_timer_init(); //初始化时钟
+	skynet_socket_init(); //初始化socket
+	skynet_profile_enable(config->profile); //是否其中skynet统计
 
+	//创建logger服务 skynet的第一个服务
 	struct skynet_context *ctx = skynet_context_new(config->logservice, config->logger);
 	if (ctx == NULL) {
 		fprintf(stderr, "Can't launch %s service\n", config->logservice);
 		exit(1);
 	}
 
+	//skynet启动服务 skynet的第二个服务
 	bootstrap(ctx, config->bootstrap);
 
 	start(config->thread);

@@ -9,7 +9,7 @@
 #include <assert.h>
 
 static struct skynet_context * REMOTE = 0;
-static unsigned int HARBOR = ~0;
+static unsigned int HARBOR = ~0; //0xffffffff
 
 void 
 skynet_harbor_send(struct remote_message *rmsg, uint32_t source, int session) {
@@ -19,6 +19,7 @@ skynet_harbor_send(struct remote_message *rmsg, uint32_t source, int session) {
 	skynet_context_send(REMOTE, rmsg, sizeof(*rmsg) , source, type , session);
 }
 
+//判断是不是远程消息
 int 
 skynet_harbor_message_isremote(uint32_t handle) {
 	assert(HARBOR != ~0);
@@ -26,6 +27,7 @@ skynet_harbor_message_isremote(uint32_t handle) {
 	return h != HARBOR && h !=0;
 }
 
+//高8位是harbor位，所以左移24位
 void
 skynet_harbor_init(int harbor) {
 	HARBOR = (unsigned int)harbor << HANDLE_REMOTE_SHIFT;

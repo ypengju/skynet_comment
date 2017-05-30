@@ -9,11 +9,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define MEMORY_WARNING_REPORT (1024 * 1024 * 32)
+#define MEMORY_WARNING_REPORT (1024 * 1024 * 32) //32M
 
 struct snlua {
-	lua_State * L;
-	struct skynet_context * ctx;
+	lua_State * L; //lua虚拟机
+	struct skynet_context * ctx; //服务环境
 	size_t mem;
 	size_t mem_report;
 	size_t mem_limit;
@@ -177,6 +177,7 @@ lalloc(void * ud, void *ptr, size_t osize, size_t nsize) {
 	return skynet_lalloc(ptr, osize, nsize);
 }
 
+//创建lua虚拟机
 struct snlua *
 snlua_create(void) {
 	struct snlua * l = skynet_malloc(sizeof(*l));

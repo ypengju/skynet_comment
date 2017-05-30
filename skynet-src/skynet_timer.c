@@ -21,11 +21,11 @@
 typedef void (*timer_execute_func)(void *ud,void *arg);
 
 #define TIME_NEAR_SHIFT 8
-#define TIME_NEAR (1 << TIME_NEAR_SHIFT)
+#define TIME_NEAR (1 << TIME_NEAR_SHIFT) //256
 #define TIME_LEVEL_SHIFT 6
-#define TIME_LEVEL (1 << TIME_LEVEL_SHIFT)
-#define TIME_NEAR_MASK (TIME_NEAR-1)
-#define TIME_LEVEL_MASK (TIME_LEVEL-1)
+#define TIME_LEVEL (1 << TIME_LEVEL_SHIFT) //64
+#define TIME_NEAR_MASK (TIME_NEAR-1) //255
+#define TIME_LEVEL_MASK (TIME_LEVEL-1) //63
 
 struct timer_event {
 	uint32_t handle;
@@ -33,8 +33,8 @@ struct timer_event {
 };
 
 struct timer_node {
-	struct timer_node *next;
-	uint32_t expire;
+	struct timer_node *next; //
+	uint32_t expire; //有效期
 };
 
 struct link_list {
@@ -45,14 +45,14 @@ struct link_list {
 struct timer {
 	struct link_list near[TIME_NEAR];
 	struct link_list t[4][TIME_LEVEL];
-	struct spinlock lock;
-	uint32_t time;
-	uint32_t starttime;
-	uint64_t current;
-	uint64_t current_point;
+	struct spinlock lock; //自旋锁
+	uint32_t time; //时间
+	uint32_t starttime; //进程启动的时间戳， 单位秒
+	uint64_t current; //进程运行的时间 单位skynet单位
+	uint64_t current_point; //当前时间点， 单位1/100秒
 };
 
-static struct timer * TI = NULL;
+static struct timer * TI = NULL; //全局时间结构体
 
 static inline struct timer_node *
 link_clear(struct link_list *list) {
@@ -137,6 +137,7 @@ timer_shift(struct timer *T) {
 	}
 }
 
+//分发列表, 入队列
 static inline void
 dispatch_list(struct timer_node *current) {
 	do {
@@ -168,6 +169,7 @@ timer_execute(struct timer *T) {
 	}
 }
 
+//单个时间单位更新
 static void 
 timer_update(struct timer *T) {
 	SPIN_LOCK(T);
@@ -183,24 +185,28 @@ timer_update(struct timer *T) {
 	SPIN_UNLOCK(T);
 }
 
+//创建skynet时间
 static struct timer *
 timer_create_timer() {
+	//指向timer结构的指针，并初始化
 	struct timer *r=(struct timer *)skynet_malloc(sizeof(struct timer));
 	memset(r,0,sizeof(*r));
 
 	int i,j;
 
+	//初始化数组
 	for (i=0;i<TIME_NEAR;i++) {
 		link_clear(&r->near[i]);
 	}
 
+	//初始化二维数组
 	for (i=0;i<4;i++) {
 		for (j=0;j<TIME_LEVEL;j++) {
 			link_clear(&r->t[i][j]);
 		}
 	}
 
-	SPIN_INIT(r)
+	SPIN_INIT(r) //初始化自旋锁
 
 	r->current = 0;
 
@@ -230,6 +236,7 @@ skynet_timeout(uint32_t handle, int time, int session) {
 }
 
 // centisecond: 1/100 second
+//获取系统时间，精度为百分之一秒
 static void
 systime(uint32_t *sec, uint32_t *cs) {
 #if !defined(__APPLE__)
@@ -245,6 +252,7 @@ systime(uint32_t *sec, uint32_t *cs) {
 #endif
 }
 
+//获取skynet的时间戳
 static uint64_t
 gettime() {
 	uint64_t t;
@@ -262,6 +270,7 @@ gettime() {
 	return t;
 }
 
+//更新时间
 void
 skynet_updatetime(void) {
 	uint64_t cp = gettime();
@@ -279,16 +288,19 @@ skynet_updatetime(void) {
 	}
 }
 
+//进程启动的时间戳 单位秒
 uint32_t
 skynet_starttime(void) {
 	return TI->starttime;
 }
 
+//返回进程启动的运行的时间
 uint64_t 
 skynet_now(void) {
 	return TI->current;
 }
 
+//时间初始化，将系统时间单位转换成skynet单位
 void 
 skynet_timer_init(void) {
 	TI = timer_create_timer();

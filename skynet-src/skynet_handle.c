@@ -11,26 +11,30 @@
 #define DEFAULT_SLOT_SIZE 4
 #define MAX_SLOT_SIZE 0x40000000
 
+//名称和handle对应
 struct handle_name {
-	char * name;
-	uint32_t handle;
+	char * name; //名称
+	uint32_t handle; //handle
 };
 
+//handle存储
 struct handle_storage {
-	struct rwlock lock;
+	struct rwlock lock; //读写锁
 
-	uint32_t harbor;
-	uint32_t handle_index;
-	int slot_size;
-	struct skynet_context ** slot;
+	uint32_t harbor; //harbor地址
+	uint32_t handle_index; //下一个handle地址
+	int slot_size; //槽到大小
+	struct skynet_context ** slot; //context数组，大小为slot_size
 	
-	int name_cap;
-	int name_count;
-	struct handle_name *name;
+	int name_cap; //存储具名服务数组的大小
+	int name_count; //具名服务的数量
+	struct handle_name *name; //保存hand_name结构的数组，大小为name_cap
 };
 
 static struct handle_storage *H = NULL;
 
+//注册处理器
+//分配handle地址，如果数组大小不够，扩容
 uint32_t
 skynet_handle_register(struct skynet_context *ctx) {
 	struct handle_storage *s = H;
@@ -40,7 +44,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 	for (;;) {
 		int i;
 		for (i=0;i<s->slot_size;i++) {
-			uint32_t handle = (i+s->handle_index) & HANDLE_MASK;
+			uint32_t handle = (i+s->handle_index) & HANDLE_MASK; //本地地址
 			int hash = handle & (s->slot_size-1);
 			if (s->slot[hash] == NULL) {
 				s->slot[hash] = ctx;
@@ -48,7 +52,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 
 				rwlock_wunlock(&s->lock);
 
-				handle |= s->harbor;
+				handle |= s->harbor; //将harbor地址和本地地址相连
 				return handle;
 			}
 		}
@@ -66,6 +70,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 	}
 }
 
+//回收handle地址
 int
 skynet_handle_retire(uint32_t handle) {
 	int ret = 0;
@@ -79,7 +84,8 @@ skynet_handle_retire(uint32_t handle) {
 	if (ctx != NULL && skynet_context_handle(ctx) == handle) {
 		s->slot[hash] = NULL;
 		ret = 1;
-		int i;
+		//释放handle,并重排name数组（后边的向前移位）
+		int i; 
 		int j=0, n=s->name_count;
 		for (i=0; i<n; ++i) {
 			if (s->name[i].handle == handle) {
@@ -97,6 +103,7 @@ skynet_handle_retire(uint32_t handle) {
 
 	rwlock_wunlock(&s->lock);
 
+	//释放服务
 	if (ctx) {
 		// release ctx may call skynet_handle_* , so wunlock first.
 		skynet_context_release(ctx);
@@ -148,6 +155,7 @@ skynet_handle_grab(uint32_t handle) {
 	return result;
 }
 
+//通过名称找到handle
 uint32_t 
 skynet_handle_findname(const char * name) {
 	struct handle_storage *s = H;
@@ -156,6 +164,7 @@ skynet_handle_findname(const char * name) {
 
 	uint32_t handle = 0;
 
+	//因为名称是按顺序存储的，所以类型二分查找
 	int begin = 0;
 	int end = s->name_count - 1;
 	while (begin<=end) {
@@ -178,6 +187,7 @@ skynet_handle_findname(const char * name) {
 	return handle;
 }
 
+//将name和handle组织插入s->name中，按name名称的顺序存储，数组大小不够的申请空间
 static void
 _insert_name_before(struct handle_storage *s, char *name, uint32_t handle, int before) {
 	if (s->name_count >= s->name_cap) {
@@ -204,6 +214,7 @@ _insert_name_before(struct handle_storage *s, char *name, uint32_t handle, int b
 	s->name_count ++;
 }
 
+//找到该名称在name中的位置
 static const char *
 _insert_name(struct handle_storage *s, const char * name, uint32_t handle) {
 	int begin = 0;
@@ -228,6 +239,9 @@ _insert_name(struct handle_storage *s, const char * name, uint32_t handle) {
 	return result;
 }
 
+//handle和名称挂钩
+//handle 服务地址
+//name 名称
 const char * 
 skynet_handle_namehandle(uint32_t handle, const char *name) {
 	rwlock_wlock(&H->lock);
@@ -239,6 +253,7 @@ skynet_handle_namehandle(uint32_t handle, const char *name) {
 	return ret;
 }
 
+//handle初始化
 void 
 skynet_handle_init(int harbor) {
 	assert(H==NULL);

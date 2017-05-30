@@ -88,6 +88,7 @@ struct socket {
 	} p;
 };
 
+//socket_server整体结构
 struct socket_server {
 	int recvctrl_fd;
 	int sendctrl_fd;

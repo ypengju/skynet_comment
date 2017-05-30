@@ -13,16 +13,19 @@
 
 static struct socket_server * SOCKET_SERVER = NULL;
 
+//创建socket_server
 void 
 skynet_socket_init() {
 	SOCKET_SERVER = socket_server_create();
 }
 
+//退出socket_server
 void
 skynet_socket_exit() {
 	socket_server_exit(SOCKET_SERVER);
 }
 
+//释放socket_server
 void
 skynet_socket_free() {
 	socket_server_release(SOCKET_SERVER);

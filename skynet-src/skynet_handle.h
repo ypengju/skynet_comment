@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+//低24位为本地服务地址，高8位是远程harbor地址
 // reserve high 8 bits for remote id
 #define HANDLE_MASK 0xffffff
 #define HANDLE_REMOTE_SHIFT 24

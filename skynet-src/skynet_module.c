@@ -13,14 +13,16 @@
 #define MAX_MODULE_TYPE 32
 
 struct modules {
-	int count;
+	int count; //模块数量
 	struct spinlock lock;
-	const char * path;
+	const char * path; //模块路径
 	struct skynet_module m[MAX_MODULE_TYPE];
 };
 
 static struct modules * M = NULL;
 
+//打开指定名称的动态链接库
+//用指定名称替换路径中的？并打开动态库返回
 static void *
 _try_open(struct modules *m, const char * name) {
 	const char *l;
@@ -62,6 +64,7 @@ _try_open(struct modules *m, const char * name) {
 	return dl;
 }
 
+//查询指定名称的c模块
 static struct skynet_module * 
 _query(const char * name) {
 	int i;
@@ -73,6 +76,7 @@ _query(const char * name) {
 	return NULL;
 }
 
+//获取指定动态库中的指定方法地址
 static void *
 get_api(struct skynet_module *mod, const char *api_name) {
 	size_t name_size = strlen(mod->name);
@@ -89,6 +93,7 @@ get_api(struct skynet_module *mod, const char *api_name) {
 	return dlsym(mod->module, ptr);
 }
 
+//获取指定方法地址，并复制给指针函数
 static int
 open_sym(struct skynet_module *mod) {
 	mod->create = get_api(mod, "_create");
@@ -99,6 +104,7 @@ open_sym(struct skynet_module *mod) {
 	return mod->init == NULL;
 }
 
+//查询模块，延迟初始化的，只有等到第一次查询的时候才会加载该模块
 struct skynet_module * 
 skynet_module_query(const char * name) {
 	struct skynet_module * result = _query(name);
@@ -142,6 +148,7 @@ skynet_module_insert(struct skynet_module *mod) {
 	SPIN_UNLOCK(M)
 }
 
+//调用指定模块的create方法
 void * 
 skynet_module_instance_create(struct skynet_module *m) {
 	if (m->create) {
@@ -151,11 +158,14 @@ skynet_module_instance_create(struct skynet_module *m) {
 	}
 }
 
+//调用指定模块的init方法
+//服务的初始化
 int
 skynet_module_instance_init(struct skynet_module *m, void * inst, struct skynet_context *ctx, const char * parm) {
 	return m->init(inst, ctx, parm);
 }
 
+//调用指定模块的release方法
 void 
 skynet_module_instance_release(struct skynet_module *m, void *inst) {
 	if (m->release) {
@@ -163,6 +173,7 @@ skynet_module_instance_release(struct skynet_module *m, void *inst) {
 	}
 }
 
+//调用指定模块的signal方法
 void
 skynet_module_instance_signal(struct skynet_module *m, void *inst, int signal) {
 	if (m->signal) {
@@ -170,6 +181,7 @@ skynet_module_instance_signal(struct skynet_module *m, void *inst, int signal) {
 	}
 }
 
+//c模块初始化
 void 
 skynet_module_init(const char *path) {
 	struct modules *m = skynet_malloc(sizeof(*m));

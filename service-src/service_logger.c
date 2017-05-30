@@ -6,11 +6,12 @@
 #include <string.h>
 
 struct logger {
-	FILE * handle;
-	char * filename;
-	int close;
+	FILE * handle; //打开的log文件
+	char * filename; //文件名称
+	int close; // 文件状态， 0 表示关闭，1 表示打开
 };
 
+//创建一个looger结构
 struct logger *
 logger_create(void) {
 	struct logger * inst = skynet_malloc(sizeof(*inst));
@@ -50,6 +51,7 @@ logger_cb(struct skynet_context * context, void *ud, int type, int session, uint
 	return 0;
 }
 
+//logger初始化，parm非空，则logger输出到parm指定的文件，否则输出的标准输出
 int
 logger_init(struct logger * inst, struct skynet_context *ctx, const char * parm) {
 	if (parm) {

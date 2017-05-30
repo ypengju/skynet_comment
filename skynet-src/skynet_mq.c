@@ -18,28 +18,32 @@
 #define MQ_IN_GLOBAL 1
 #define MQ_OVERLOAD 1024
 
+//消息队列结构
 struct message_queue {
-	struct spinlock lock;
-	uint32_t handle;
-	int cap;
-	int head;
-	int tail;
-	int release;
-	int in_global;
-	int overload;
-	int overload_threshold;
-	struct skynet_message *queue;
-	struct message_queue *next;
+	struct spinlock lock; //自旋锁
+	uint32_t handle; //消息处理
+	int cap; //队列的大小 默认64
+	int head; //第一个消息 index
+	int tail; //最后一个消息 index
+	int release; //标记是否释放 1 表示释放
+	int in_global; //是否在全局消息队列中
+	int overload; //消息过载
+	int overload_threshold; //过载极限
+	struct skynet_message *queue; //消息
+	struct message_queue *next; //下一个消息队列
 };
 
+//全局消息结构
 struct global_queue {
-	struct message_queue *head;
-	struct message_queue *tail;
-	struct spinlock lock;
+	struct message_queue *head; //指向第一个消息队列
+	struct message_queue *tail; //指向最后一个消息队列
+	struct spinlock lock; //自旋锁
 };
 
+//全局消息队列
 static struct global_queue *Q = NULL;
 
+//全局消息入队列
 void 
 skynet_globalmq_push(struct message_queue * queue) {
 	struct global_queue *q= Q;
@@ -50,11 +54,12 @@ skynet_globalmq_push(struct message_queue * queue) {
 		q->tail->next = queue;
 		q->tail = queue;
 	} else {
-		q->head = q->tail = queue;
+		q->head = q->tail = queue; //第一个
 	}
 	SPIN_UNLOCK(q)
 }
 
+//全局消息出队列
 struct message_queue * 
 skynet_globalmq_pop() {
 	struct global_queue *q = Q;
@@ -74,6 +79,8 @@ skynet_globalmq_pop() {
 	return mq;
 }
 
+//创建一个消息队列
+//handle 服务地址
 struct message_queue * 
 skynet_mq_create(uint32_t handle) {
 	struct message_queue *q = skynet_malloc(sizeof(*q));
@@ -95,6 +102,7 @@ skynet_mq_create(uint32_t handle) {
 	return q;
 }
 
+//释放一个消息队列
 static void 
 _release(struct message_queue *q) {
 	assert(q->next == NULL);
@@ -103,11 +111,13 @@ _release(struct message_queue *q) {
 	skynet_free(q);
 }
 
+//获得消息处理
 uint32_t 
 skynet_mq_handle(struct message_queue *q) {
 	return q->handle;
 }
 
+//消息的长度
 int
 skynet_mq_length(struct message_queue *q) {
 	int head, tail,cap;
@@ -124,6 +134,7 @@ skynet_mq_length(struct message_queue *q) {
 	return tail + cap - head;
 }
 
+//消息过载多少
 int
 skynet_mq_overload(struct message_queue *q) {
 	if (q->overload) {
@@ -134,6 +145,7 @@ skynet_mq_overload(struct message_queue *q) {
 	return 0;
 }
 
+//消息出队列
 int
 skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 	int ret = 1;
@@ -146,10 +158,11 @@ skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 		int tail = q->tail;
 		int cap = q->cap;
 
+		//队列头超出队列大小，将头指向队列数组的开始
 		if (head >= cap) {
 			q->head = head = 0;
 		}
-		int length = tail - head;
+		int length = tail - head; //队列中剩余消息数
 		if (length < 0) {
 			length += cap;
 		}
@@ -159,9 +172,10 @@ skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 		}
 	} else {
 		// reset overload_threshold when queue is empty
-		q->overload_threshold = MQ_OVERLOAD;
+		q->overload_threshold = MQ_OVERLOAD; //队列是空，重置
 	}
 
+	//消息队列为空，不标记不在全局中
 	if (ret) {
 		q->in_global = 0;
 	}
@@ -171,6 +185,7 @@ skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 	return ret;
 }
 
+//扩展队列大小，队列大小增加一倍
 static void
 expand_queue(struct message_queue *q) {
 	struct skynet_message *new_queue = skynet_malloc(sizeof(struct skynet_message) * q->cap * 2);
@@ -186,20 +201,24 @@ expand_queue(struct message_queue *q) {
 	q->queue = new_queue;
 }
 
+//消息入队列
 void 
 skynet_mq_push(struct message_queue *q, struct skynet_message *message) {
 	assert(message);
 	SPIN_LOCK(q)
 
+	//消息入队列
 	q->queue[q->tail] = *message;
 	if (++ q->tail >= q->cap) {
 		q->tail = 0;
 	}
 
+	//队列满了，扩展队列大小
 	if (q->head == q->tail) {
 		expand_queue(q);
 	}
 
+	//如果队列没在全局队列链表中，放入全局队列链表
 	if (q->in_global == 0) {
 		q->in_global = MQ_IN_GLOBAL;
 		skynet_globalmq_push(q);
@@ -208,14 +227,16 @@ skynet_mq_push(struct message_queue *q, struct skynet_message *message) {
 	SPIN_UNLOCK(q)
 }
 
+//初始化全局消息队列
 void 
 skynet_mq_init() {
 	struct global_queue *q = skynet_malloc(sizeof(*q));
 	memset(q,0,sizeof(*q));
-	SPIN_INIT(q);
+	SPIN_INIT(q); //初始化自旋锁
 	Q=q;
 }
 
+//标记消息队列 释放
 void 
 skynet_mq_mark_release(struct message_queue *q) {
 	SPIN_LOCK(q)
@@ -227,6 +248,7 @@ skynet_mq_mark_release(struct message_queue *q) {
 	SPIN_UNLOCK(q)
 }
 
+//释放消息队列
 static void
 _drop_queue(struct message_queue *q, message_drop drop_func, void *ud) {
 	struct skynet_message msg;
@@ -236,6 +258,7 @@ _drop_queue(struct message_queue *q, message_drop drop_func, void *ud) {
 	_release(q);
 }
 
+//释放消息
 void 
 skynet_mq_release(struct message_queue *q, message_drop drop_func, void *ud) {
 	SPIN_LOCK(q)

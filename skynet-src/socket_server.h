@@ -15,9 +15,9 @@
 struct socket_server;
 
 struct socket_message {
-	int id;
+	int id; //消息ID
 	uintptr_t opaque;
-	int ud;	// for accept, ud is new connection id ; for data, ud is size of data 
+	int ud;	// for accept, ud is new connection id ; for data, ud is size of data //两个作用
 	char * data;
 };
 

@@ -10,6 +10,7 @@
 
 #define LOG_MESSAGE_SIZE 256
 
+//skynet log 输出
 void 
 skynet_error(struct skynet_context * context, const char *msg, ...) {
 	static uint32_t logger = 0;

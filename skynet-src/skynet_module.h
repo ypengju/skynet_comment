@@ -8,9 +8,10 @@ typedef int (*skynet_dl_init)(void * inst, struct skynet_context *, const char *
 typedef void (*skynet_dl_release)(void * inst);
 typedef void (*skynet_dl_signal)(void * inst, int signal);
 
+//c服务模块的结构
 struct skynet_module {
-	const char * name;
-	void * module;
+	const char * name; //动态库的名称
+	void * module; //动态链接库的句柄
 	skynet_dl_create create;
 	skynet_dl_init init;
 	skynet_dl_release release;

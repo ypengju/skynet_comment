@@ -21,7 +21,11 @@
 #define PTYPE_RESERVED_LUA 10
 #define PTYPE_RESERVED_SNAX 11
 
-#define PTYPE_TAG_DONTCOPY 0x10000
+//skynet约定，每个服务发送出去的包都是复制到用 malloc 分配出来的连续内存。
+//接收方在处理完这个数据块（在处理的 callback 函数调用完毕）后，会默认调用 free 函数释放掉所占的内存。
+//即，发送方申请内存，接收方释放。
+//** 如果不想让框架分配内存，然后拷贝内容进去，发送时设置该标志，callback中返回1
+#define PTYPE_TAG_DONTCOPY 0x10000 //skynet在服务间发送消息不拷贝，直接发送指针和大小
 #define PTYPE_TAG_ALLOCSESSION 0x20000
 
 struct skynet_context;

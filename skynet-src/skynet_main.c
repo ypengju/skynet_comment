@@ -49,6 +49,7 @@ optstring(const char *key,const char * opt) {
 	return str;
 }
 
+//将配置数据写入全局env中
 static void
 _init_env(lua_State *L) {
 	lua_pushnil(L);  /* first key */
@@ -124,16 +125,16 @@ main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	luaS_initshr();
-	skynet_globalinit();
-	skynet_env_init();
+	luaS_initshr(); //初始化读写锁
+	skynet_globalinit(); //初始化skynet_node线程
+	skynet_env_init(); //申请内存空间，初始化skynet_env 自旋锁，Lua虚拟机
 
-	sigign();
+	sigign(); //设置信号
 
-	struct skynet_config config;
+	struct skynet_config config; //创建配置表的结构
 
-	struct lua_State *L = luaL_newstate();
-	luaL_openlibs(L);	// link lua lib
+	struct lua_State *L = luaL_newstate(); //创建新的虚拟机
+	luaL_openlibs(L);	// link lua lib 加载库
 
 	int err =  luaL_loadbufferx(L, load_config, strlen(load_config), "=[skynet config]", "t");
 	assert(err == LUA_OK);
@@ -158,7 +159,7 @@ main(int argc, char *argv[]) {
 
 	lua_close(L);
 
-	skynet_start(&config);
+	skynet_start(&config); //skynet开始
 	skynet_globalexit();
 	luaS_exitshr();
 
