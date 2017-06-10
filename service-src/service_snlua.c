@@ -131,6 +131,7 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 	return 0;
 }
 
+//服务回调
 static int
 launch_cb(struct skynet_context * context, void *ud, int type, int session, uint32_t source , const void * msg, size_t sz) {
 	assert(type == 0 && session == 0);
@@ -144,6 +145,7 @@ launch_cb(struct skynet_context * context, void *ud, int type, int session, uint
 	return 0;
 }
 
+//服务初始化
 int
 snlua_init(struct snlua *l, struct skynet_context *ctx, const char * args) {
 	int sz = strlen(args);
@@ -157,6 +159,7 @@ snlua_init(struct snlua *l, struct skynet_context *ctx, const char * args) {
 	return 0;
 }
 
+//状态机的内存管理
 static void *
 lalloc(void * ud, void *ptr, size_t osize, size_t nsize) {
 	struct snlua *l = ud;

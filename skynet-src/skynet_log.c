@@ -63,6 +63,7 @@ log_socket(FILE * f, struct skynet_socket_message * message, size_t sz) {
 	fflush(f);
 }
 
+//消息分发记录
 void 
 skynet_log_output(FILE *f, uint32_t source, int type, int session, void * buffer, size_t sz) {
 	if (type == PTYPE_SOCKET) {

@@ -8,11 +8,12 @@
 struct skynet_message {
 	uint32_t source; //消息来源
 	int session; //session
-	void * data; //消息数据
-	size_t sz; //数据大小
+	void * data; //消息数据指针
+	size_t sz; //数据大小 //传递消息时附带消息类型
 };
 
 // type is encoding in skynet_message.sz high 8bit
+// 高8位给消息类型
 #define MESSAGE_TYPE_MASK (SIZE_MAX >> 8)
 #define MESSAGE_TYPE_SHIFT ((sizeof(size_t)-1) * 8)
 

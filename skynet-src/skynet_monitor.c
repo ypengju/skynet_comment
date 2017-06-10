@@ -11,10 +11,11 @@
 struct skynet_monitor {
 	int version;
 	int check_version;
-	uint32_t source;
-	uint32_t destination;
+	uint32_t source; //来源服务
+	uint32_t destination; //目标服务
 };
 
+//创建monitor
 struct skynet_monitor * 
 skynet_monitor_new() {
 	struct skynet_monitor * ret = skynet_malloc(sizeof(*ret));
@@ -27,6 +28,7 @@ skynet_monitor_delete(struct skynet_monitor *sm) {
 	skynet_free(sm);
 }
 
+//触发监测器，记录消息原地址和目标地址
 void 
 skynet_monitor_trigger(struct skynet_monitor *sm, uint32_t source, uint32_t destination) {
 	sm->source = source;
@@ -34,6 +36,7 @@ skynet_monitor_trigger(struct skynet_monitor *sm, uint32_t source, uint32_t dest
 	ATOM_INC(&sm->version);
 }
 
+//检查检测器
 void 
 skynet_monitor_check(struct skynet_monitor *sm) {
 	if (sm->version == sm->check_version) {

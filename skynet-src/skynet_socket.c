@@ -35,6 +35,23 @@ skynet_socket_free() {
 // mainloop thread
 static void
 forward_message(int type, bool padding, struct socket_message * result) {
+
+	// struct skynet_socket_message {
+	// 	int type;
+	// 	int id;
+	// 	int ud;
+	// 	char * buffer;
+	// };
+
+	//socket消息结构
+	// struct socket_message {
+	// 	int id; //消息ID
+	// 	uintptr_t opaque;
+	// 	//对于连接来说是连接id,对于接受数据来说是数据的大小
+	// 	int ud;	// for accept, ud is new connection id ; for data, ud is size of data 
+	// 	char * data;
+	// };
+
 	struct skynet_socket_message *sm;
 	size_t sz = sizeof(*sm);
 	if (padding) {
@@ -50,8 +67,8 @@ forward_message(int type, bool padding, struct socket_message * result) {
 	}
 	sm = (struct skynet_socket_message *)skynet_malloc(sz);
 	sm->type = type;
-	sm->id = result->id;
-	sm->ud = result->ud;
+	sm->id = result->id; //id
+	sm->ud = result->ud; //
 	if (padding) {
 		sm->buffer = NULL;
 		memcpy(sm+1, result->data, sz - sizeof(*sm));
@@ -59,12 +76,14 @@ forward_message(int type, bool padding, struct socket_message * result) {
 		sm->buffer = result->data;
 	}
 
+	//构建skynet消息
 	struct skynet_message message;
 	message.source = 0;
 	message.session = 0;
 	message.data = sm;
 	message.sz = sz | ((size_t)PTYPE_SOCKET << MESSAGE_TYPE_SHIFT);
 	
+	//往服务中压入消息
 	if (skynet_context_push((uint32_t)result->opaque, &message)) {
 		// todo: report somewhere to close socket
 		// don't call skynet_socket_close here (It will block mainloop)
@@ -73,6 +92,7 @@ forward_message(int type, bool padding, struct socket_message * result) {
 	}
 }
 
+//开始socket poll
 int 
 skynet_socket_poll() {
 	struct socket_server *ss = SOCKET_SERVER;
@@ -136,6 +156,7 @@ skynet_socket_connect(struct skynet_context *ctx, const char *host, int port) {
 	return socket_server_connect(SOCKET_SERVER, source, host, port);
 }
 
+//绑定端口
 int 
 skynet_socket_bind(struct skynet_context *ctx, int fd) {
 	uint32_t source = skynet_context_handle(ctx);

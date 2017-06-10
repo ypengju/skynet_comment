@@ -19,7 +19,7 @@ skynet_harbor_send(struct remote_message *rmsg, uint32_t source, int session) {
 	skynet_context_send(REMOTE, rmsg, sizeof(*rmsg) , source, type , session);
 }
 
-//判断是不是远程消息
+//判断服务地址是不是远程harbor的服务
 int 
 skynet_harbor_message_isremote(uint32_t handle) {
 	assert(HARBOR != ~0);

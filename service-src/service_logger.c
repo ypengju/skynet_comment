@@ -31,6 +31,7 @@ logger_release(struct logger * inst) {
 	skynet_free(inst);
 }
 
+//log服务的回掉
 static int
 logger_cb(struct skynet_context * context, void *ud, int type, int session, uint32_t source, const void * msg, size_t sz) {
 	struct logger * inst = ud;

@@ -136,6 +136,7 @@ skynet_handle_retireall() {
 	}
 }
 
+//通过服务地址找到对应的context
 struct skynet_context * 
 skynet_handle_grab(uint32_t handle) {
 	struct handle_storage *s = H;

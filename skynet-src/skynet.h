@@ -26,7 +26,7 @@
 //即，发送方申请内存，接收方释放。
 //** 如果不想让框架分配内存，然后拷贝内容进去，发送时设置该标志，callback中返回1
 #define PTYPE_TAG_DONTCOPY 0x10000 //skynet在服务间发送消息不拷贝，直接发送指针和大小
-#define PTYPE_TAG_ALLOCSESSION 0x20000
+#define PTYPE_TAG_ALLOCSESSION 0x20000 //是否分配session
 
 struct skynet_context;
 

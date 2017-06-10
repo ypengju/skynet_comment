@@ -18,18 +18,19 @@
 #include <string.h>
 #include <signal.h>
 
+//全局的检测器
 struct monitor {
 	int count; //工作线程数量
-	struct skynet_monitor ** m;
+	struct skynet_monitor ** m; //存储工作线程的监测器的指针数组，每个工作线程都有一个监测器
 	pthread_cond_t cond; //条件变量
 	pthread_mutex_t mutex; //互斥锁
 	int sleep;
-	int quit;
+	int quit; //标记是否退出
 };
 
 //工作线程的参数，monitor
 struct worker_parm {
-	struct monitor *m; //monitor
+	struct monitor *m; //指向全局的检测器
 	int id; //第几个工作线程
 	int weight; //权重
 };
@@ -62,6 +63,7 @@ wakeup(struct monitor *m, int busy) {
 	}
 }
 
+//socket 线程
 static void *
 thread_socket(void *p) {
 	struct monitor * m = p;
@@ -104,7 +106,7 @@ thread_monitor(void *p) {
 		for (i=0;i<n;i++) {
 			skynet_monitor_check(m->m[i]);
 		}
-		for (i=0;i<5;i++) {
+		for (i=0;i<5;i++) { //这里为什么是5
 			CHECK_ABORT
 			sleep(1);
 		}
@@ -152,6 +154,7 @@ thread_timer(void *p) {
 	return NULL;
 }
 
+//工作线程
 static void *
 thread_worker(void *p) {
 	struct worker_parm *wp = p;
@@ -187,10 +190,10 @@ start(int thread) {
 
 	struct monitor *m = skynet_malloc(sizeof(*m));
 	memset(m, 0, sizeof(*m));
-	m->count = thread;
+	m->count = thread; //工作线程的数量
 	m->sleep = 0;
 
-	//分配指针的大小
+	//为每个工作线程有一个监测器
 	m->m = skynet_malloc(thread * sizeof(struct skynet_monitor *));
 	int i;
 	for (i=0;i<thread;i++) {

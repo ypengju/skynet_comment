@@ -14,11 +14,13 @@
 
 struct socket_server;
 
+//socket消息结构
 struct socket_message {
-	int id; //消息ID
-	uintptr_t opaque;
-	int ud;	// for accept, ud is new connection id ; for data, ud is size of data //两个作用
-	char * data;
+	int id; //socket 描述符
+	uintptr_t opaque; //对应服务地址
+	//对于连接来说是连接id,对于接受数据来说是数据的大小
+	int ud;	// for accept, ud is new connection id ; for data, ud is size of data 
+	char * data; //数据
 };
 
 struct socket_server * socket_server_create();
@@ -55,6 +57,7 @@ int socket_server_udp_send(struct socket_server *, int id, const struct socket_u
 // extract the address of the message, struct socket_message * should be SOCKET_UDP
 const struct socket_udp_address * socket_server_udp_address(struct socket_server *, struct socket_message *, int *addrsz);
 
+//套接字对象接口？
 struct socket_object_interface {
 	void * (*buffer)(void *);
 	int (*size)(void *);
