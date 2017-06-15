@@ -4,16 +4,18 @@ local socket = require "socket"
 local cluster = require "cluster.core"
 
 local config_name = skynet.getenv "cluster"
-local node_address = {}
-local node_session = {}
+local node_address = {} --保存节点地址
+local node_session = {} --记录节点的session
 local command = {}
 
+--
 local function read_response(sock)
 	local sz = socket.header(sock:read(2))
 	local msg = sock:read(sz)
 	return cluster.unpackresponse(msg)	-- session, ok, data, padding
 end
 
+--第一请求将建立连接
 local function open_channel(t, key)
 	local host, port = string.match(node_address[key], "([^:]+):(.*)$")
 	local c = sc.channel {
@@ -29,6 +31,9 @@ end
 
 local node_channel = setmetatable({}, { __index = open_channel })
 
+--加载配置文件
+-- db = "127.0.0.1:2528"
+-- db2 = "127.0.0.1:2529"
 local function loadconfig(tmp)
 	if tmp == nil then
 		tmp = {}
@@ -51,11 +56,13 @@ local function loadconfig(tmp)
 	end
 end
 
+--重新加载配置文件
 function command.reload(source, config)
 	loadconfig(config)
 	skynet.ret(skynet.pack(nil))
 end
 
+--调用open，该节点打开监听
 function command.listen(source, addr, port)
 	local gate = skynet.newservice("gate")
 	if port == nil then
@@ -65,6 +72,7 @@ function command.listen(source, addr, port)
 	skynet.ret(skynet.pack(nil))
 end
 
+--发送请求
 local function send_request(source, node, addr, msg, sz)
 	local session = node_session[node] or 1
 	-- msg is a local pointer, cluster.packrequest will free it
@@ -72,11 +80,12 @@ local function send_request(source, node, addr, msg, sz)
 	node_session[node] = new_session
 
 	-- node_channel[node] may yield or throw error
-	local c = node_channel[node]
+	local c = node_channel[node] --获取该节点的socketchannel,如果没有则尝试连接
 
 	return c:request(request, session, padding)
 end
 
+--cluster.call请求，有响应
 function command.req(...)
 	local ok, msg, sz = pcall(send_request, ...)
 	if ok then
@@ -99,15 +108,16 @@ function command.push(source, node, addr, msg, sz)
 	end
 
 	-- node_channel[node] may yield or throw error
-	local c = node_channel[node]
+	local c = node_channel[node] 
 
 	c:request(request, nil, padding)
 
 	-- notice: push may fail where the channel is disconnected or broken.
 end
 
-local proxy = {}
+local proxy = {} --保存生成的代理
 
+--生成一个本地cluster代理服务
 function command.proxy(source, node, name)
 	local fullname = node .. "." .. name
 	if proxy[fullname] == nil then
@@ -116,18 +126,19 @@ function command.proxy(source, node, name)
 	skynet.ret(skynet.pack(proxy[fullname]))
 end
 
-local register_name = {}
+local register_name = {} --保存注册的名称和服务
 
+--全网注册服务
 function command.register(source, name, addr)
 	assert(register_name[name] == nil)
 	addr = addr or source
 	local old_name = register_name[addr]
 	if old_name then
-		register_name[old_name] = nil
+		register_name[old_name] = nil --该服务已经注册过了，清掉
 	end
-	register_name[addr] = name
+	register_name[addr] = name --同时保存，和名称
 	register_name[name] = addr
-	skynet.ret(nil)
+	skynet.ret(nil) --空响应
 	skynet.error(string.format("Register [%s] :%08x", name, addr))
 end
 
