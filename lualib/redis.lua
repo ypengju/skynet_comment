@@ -13,6 +13,16 @@ local meta = {
 	-- DO NOT close channel in __gc
 }
 
+--[[
+Redis 命令会返回多种不同类型的回复。
+通过检查服务器发回数据的第一个字节， 可以确定这个回复是什么类型：
+
+状态回复（status reply）的第一个字节是 "+"
+错误回复（error reply）的第一个字节是 "-"
+整数回复（integer reply）的第一个字节是 ":"
+批量回复（bulk reply）的第一个字节是 "$"
+多条批量回复（multi bulk reply）的第一个字节是 "*"
+]]
 ---------- redis response
 local redcmd = {}
 
@@ -46,8 +56,8 @@ local function read_response(fd)
 end
 
 redcmd[42] = function(fd, data)	-- '*'
-	local n = tonumber(data)
-	if n < 0 then
+	local n = tonumber(data) 
+	if n < 0 then -- -1 表示该元素不存在，返回nil
 		return true, nil
 	end
 	local bulk = {}
@@ -96,6 +106,15 @@ local count_cache = make_cache(function(t,k)
 		return s
 	end)
 
+--组成redis数据的命令，客户端和服务器发送数据必须以\r\n结尾
+--[[
+*<参数数量> CR LF
+$<参数 1 的字节数量> CR LF
+<参数 1 的数据> CR LF
+...
+$<参数 N 的字节数量> CR LF
+<参数 N 的数据> CR LF
+]]
 local function compose_message(cmd, msg)
 	local t = type(msg)
 	local lines = {}
@@ -123,6 +142,11 @@ local function compose_message(cmd, msg)
 	return lines
 end
 
+--[[
+  数据库登录，有密码使用auth命令， 没密码使用select命令
+  @param auth  密码
+  @param db    数据库
+]]
 local function redis_login(auth, db)
 	if auth == nil and db == nil then
 		return
@@ -137,6 +161,7 @@ local function redis_login(auth, db)
 	end
 end
 
+--redis连接
 function redis.connect(db_conf)
 	local channel = socketchannel.channel {
 		host = db_conf.host,
