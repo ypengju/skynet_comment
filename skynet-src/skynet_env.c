@@ -44,6 +44,7 @@ skynet_setenv(const char *key, const char *value) {
 	SPIN_UNLOCK(E)
 }
 
+//初始化配置变量虚拟机，该虚拟机中存储配置的config变量或者该set进来的数据。
 void
 skynet_env_init() {
 	E = skynet_malloc(sizeof(*E));

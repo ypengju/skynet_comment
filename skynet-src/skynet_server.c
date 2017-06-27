@@ -48,8 +48,8 @@ struct skynet_context {
 	skynet_cb cb; //服务回掉函数
 	struct message_queue *queue; //每个服务的私有消息队列
 	FILE * logfile; //log文件
-	uint64_t cpu_cost;	// in microsec //消息回调，cpu使用时间
-	uint64_t cpu_start;	// in microsec //消息回掉，cpu开始事件
+	uint64_t cpu_cost;	// in microsec //cpu使用时间
+	uint64_t cpu_start;	// in microsec //cpu开始时间
 	char result[32];
 	uint32_t handle; //分配的服务地址
 	int session_id;
@@ -67,7 +67,7 @@ struct skynet_node {
 	int total; //该进程(节点)服务数 服务创建后加1， 服务销毁后减1
 	int init;
 	uint32_t monitor_exit; //监测器是否退出
-	pthread_key_t handle_key;
+	pthread_key_t handle_key; //线程特殊值，该值所有线程都可以访问，但是在每个线程中值都不一样。
 	bool profile;	// default is off //是否打开性能统计
 };
 
@@ -103,6 +103,7 @@ skynet_current_handle(void) {
 	}
 }
 
+//将10进制转换位16进制，保存在str指向的字符串中
 static void
 id_to_hex(char * str, uint32_t id) {
 	int i;
@@ -135,7 +136,7 @@ drop_message(struct skynet_message *msg, void *ud) {
 //param 参数
 struct skynet_context * 
 skynet_context_new(const char * name, const char *param) {
-	struct skynet_module * mod = skynet_module_query(name); //查询模块，没有就加载
+	struct skynet_module * mod = skynet_module_query(name); //查询c模块，没有就加载
 
 	if (mod == NULL)
 		return NULL;
@@ -434,7 +435,7 @@ cmd_reg(struct skynet_context * context, const char * param) {
 		sprintf(context->result, ":%x", context->handle);
 		return context->result;
 	} else if (param[0] == '.') {
-		return skynet_handle_namehandle(context->handle, param + 1);
+		return skynet_handle_namehandle(context->handle, param + 1); //注册本地具名服务
 	} else {
 		skynet_error(context, "Can't register global name %s in C", param);
 		return NULL;
@@ -503,6 +504,7 @@ cmd_kill(struct skynet_context * context, const char * param) {
 	return NULL;
 }
 
+//启动服务
 static const char *
 cmd_launch(struct skynet_context * context, const char * param) {
 	size_t sz = strlen(param);
@@ -833,6 +835,7 @@ skynet_context_send(struct skynet_context * ctx, void * msg, size_t sz, uint32_t
 	skynet_mq_push(ctx->queue, &smsg);
 }
 
+//初始化全局skenet_node节点，设置主线程的特殊值，（主线程就是启动线程）
 void 
 skynet_globalinit(void) {
 	G_NODE.total = 0;
@@ -851,13 +854,14 @@ skynet_globalexit(void) {
 	pthread_key_delete(G_NODE.handle_key);
 }
 
-//线程初始化
+//设置线程的特殊值
 void
 skynet_initthread(int m) {
 	uintptr_t v = (uint32_t)(-m);
 	pthread_setspecific(G_NODE.handle_key, (void *)v);
 }
 
+//是否开启性能统计
 void
 skynet_profile_enable(int enable) {
 	G_NODE.profile = (bool)enable;

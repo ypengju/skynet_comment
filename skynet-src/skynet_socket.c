@@ -33,6 +33,7 @@ skynet_socket_free() {
 }
 
 // mainloop thread
+// 管道读取出来的数据处理完，返还给对应的服务
 static void
 forward_message(int type, bool padding, struct socket_message * result) {
 
@@ -144,9 +145,10 @@ skynet_socket_send_lowpriority(struct skynet_context *ctx, int id, void *buffer,
 	return socket_server_send_lowpriority(SOCKET_SERVER, id, buffer, sz);
 }
 
+//监听一个端口
 int 
 skynet_socket_listen(struct skynet_context *ctx, const char *host, int port, int backlog) {
-	uint32_t source = skynet_context_handle(ctx);
+	uint32_t source = skynet_context_handle(ctx); 
 	return socket_server_listen(SOCKET_SERVER, source, host, port, backlog);
 }
 
@@ -175,6 +177,7 @@ skynet_socket_shutdown(struct skynet_context *ctx, int id) {
 	socket_server_shutdown(SOCKET_SERVER, source, id);
 }
 
+//开始指定的socket接受数据
 void 
 skynet_socket_start(struct skynet_context *ctx, int id) {
 	uint32_t source = skynet_context_handle(ctx);

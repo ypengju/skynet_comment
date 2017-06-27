@@ -15,7 +15,7 @@ struct skynet_monitor {
 	uint32_t destination; //目标服务
 };
 
-//创建monitor
+//创建检测器
 struct skynet_monitor * 
 skynet_monitor_new() {
 	struct skynet_monitor * ret = skynet_malloc(sizeof(*ret));
@@ -23,6 +23,7 @@ skynet_monitor_new() {
 	return ret;
 }
 
+//释放监控器
 void 
 skynet_monitor_delete(struct skynet_monitor *sm) {
 	skynet_free(sm);
@@ -36,7 +37,7 @@ skynet_monitor_trigger(struct skynet_monitor *sm, uint32_t source, uint32_t dest
 	ATOM_INC(&sm->version);
 }
 
-//检查检测器
+//监控器检查，查看有没有死循环
 void 
 skynet_monitor_check(struct skynet_monitor *sm) {
 	if (sm->version == sm->check_version) {

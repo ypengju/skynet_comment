@@ -18,13 +18,13 @@
 #include <string.h>
 #include <signal.h>
 
-//全局的检测器
+//全局的监测器
 struct monitor {
 	int count; //工作线程数量
 	struct skynet_monitor ** m; //存储工作线程的监测器的指针数组，每个工作线程都有一个监测器
 	pthread_cond_t cond; //条件变量
 	pthread_mutex_t mutex; //互斥锁
-	int sleep;
+	int sleep; //挂起的工作线程数量
 	int quit; //标记是否退出
 };
 
@@ -81,7 +81,7 @@ thread_socket(void *p) {
 	return NULL;
 }
 
-//释放monitor
+//释放监控
 static void
 free_monitor(struct monitor *m) {
 	int i;
@@ -95,6 +95,7 @@ free_monitor(struct monitor *m) {
 	skynet_free(m);
 }
 
+//监控线程
 static void *
 thread_monitor(void *p) {
 	struct monitor * m = p;
@@ -102,11 +103,14 @@ thread_monitor(void *p) {
 	int n = m->count;
 	skynet_initthread(THREAD_MONITOR);
 	for (;;) {
+		// #define CHECK_ABORT if (skynet_context_total()==0) break;
 		CHECK_ABORT
+
 		for (i=0;i<n;i++) {
 			skynet_monitor_check(m->m[i]);
 		}
-		for (i=0;i<5;i++) { //这里为什么是5
+		//每五秒检查一次
+		for (i=0;i<5;i++) {
 			CHECK_ABORT
 			sleep(1);
 		}
@@ -184,9 +188,10 @@ thread_worker(void *p) {
 	return NULL;
 }
 
+//开启线程
 static void
 start(int thread) {
-	pthread_t pid[thread+3];
+	pthread_t pid[thread+3]; //skynet的线程数组，thread为工作线程数，外加 时钟线程 监视器线程 socket线程
 
 	struct monitor *m = skynet_malloc(sizeof(*m));
 	memset(m, 0, sizeof(*m));
@@ -266,14 +271,14 @@ skynet_start(struct skynet_config * config) {
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGHUP, &sa, NULL);
 
-	//后台启动处理
+	//守护进程，后台启动
 	if (config->daemon) {
 		if (daemon_init(config->daemon)) {
 			exit(1);
 		}
 	}
 	skynet_harbor_init(config->harbor); //初始化harbor
-	skynet_handle_init(config->harbor); //初始化handle
+	skynet_handle_init(config->harbor); //初始化服务地址管理
 	skynet_mq_init(); //初始化消息队列
 	skynet_module_init(config->module_path); //初始化服务模块
 	skynet_timer_init(); //初始化时钟
@@ -287,7 +292,7 @@ skynet_start(struct skynet_config * config) {
 		exit(1);
 	}
 
-	//skynet启动服务 skynet的第二个服务
+	//skynet的启动服务 skynet的第二个服务
 	bootstrap(ctx, config->bootstrap);
 
 	start(config->thread);

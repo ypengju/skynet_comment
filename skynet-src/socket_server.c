@@ -23,12 +23,12 @@
 #define MIN_READ_BUFFER 64 //最小的读取大小
 #define SOCKET_TYPE_INVALID 0  //无效套接字
 #define SOCKET_TYPE_RESERVE 1  //预留， 已申请
-#define SOCKET_TYPE_PLISTEN 2
-#define SOCKET_TYPE_LISTEN 3
+#define SOCKET_TYPE_PLISTEN 2  //已监听端口，但未加入epoll
+#define SOCKET_TYPE_LISTEN 3   //监听，已加入epoll，等待连接
 #define SOCKET_TYPE_CONNECTING 4
-#define SOCKET_TYPE_CONNECTED 5
+#define SOCKET_TYPE_CONNECTED 5 //已连接
 #define SOCKET_TYPE_HALFCLOSE 6
-#define SOCKET_TYPE_PACCEPT 7
+#define SOCKET_TYPE_PACCEPT 7  //已创建客户端连接的socket，但还没有调用start
 #define SOCKET_TYPE_BIND 8
 
 #define MAX_SOCKET (1<<MAX_SOCKET_P) //最多接受2^16个socket连接 65536
@@ -837,7 +837,7 @@ send_socket(struct socket_server *ss, struct request_send * request, struct sock
 	return -1;
 }
 
-//监听socket
+//监听socket，标记socket为监听状态为SOCKET_TYPE_PLISTEN，表示已经监听还没开始处理数据
 static int
 listen_socket(struct socket_server *ss, struct request_listen * request, struct socket_message *result) {
 	int id = request->id;
@@ -909,6 +909,9 @@ bind_socket(struct socket_server *ss, struct request_bind *request, struct socke
 }
 
 //打开socket
+//服务器端： 从SOCKET_TYPE_PLISTEN状态改为SOCKET_TYPE_LISTEN，加入epoll等待连接
+//客户端连接上来后： 从SOCKET_TYPE_PACCEPT状态改为SOCKET_TYPE_CONNECTED，接入epoll中，等待数据
+//或者已经监听的，则表示切换处理服务
 static int
 start_socket(struct socket_server *ss, struct request_start *request, struct socket_message *result) {
 	int id = request->id;
@@ -1236,6 +1239,7 @@ report_connect(struct socket_server *ss, struct socket *s, struct socket_message
 
 // return 0 when failed, or -1 when file limit
 // 监听套接字可读事件到来，调用该函数,调用了accept
+// 监听套接字接受到来自客户端的连接
 static int
 report_accept(struct socket_server *ss, struct socket *s, struct socket_message *result) {
 	union sockaddr_all u;
@@ -1267,7 +1271,7 @@ report_accept(struct socket_server *ss, struct socket *s, struct socket_message 
 	ns->type = SOCKET_TYPE_PACCEPT;
 	result->opaque = s->opaque;
 	result->id = s->id;
-	result->ud = id;
+	result->ud = id; //对于accept ud代表新分配的id
 	result->data = NULL;
 
 	void * sin_addr = (u.s.sa_family == AF_INET) ? (void*)&u.v4.sin_addr : (void *)&u.v6.sin6_addr;
@@ -1348,7 +1352,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 		switch (s->type) {
 		case SOCKET_TYPE_CONNECTING: //对外连接，写
 			return report_connect(ss, s, result);
-		case SOCKET_TYPE_LISTEN: { //监听，读
+		case SOCKET_TYPE_LISTEN: { //监听，读, 接受到客户端连接
 			int ok = report_accept(ss, s, result);
 			if (ok > 0) {
 				return SOCKET_ACCEPT;
@@ -1493,6 +1497,7 @@ socket_server_send_lowpriority(struct socket_server *ss, int id, const void * bu
 	return 0;
 }
 
+//退出socket线程
 void
 socket_server_exit(struct socket_server *ss) {
 	struct request_package request;
@@ -1520,6 +1525,8 @@ socket_server_shutdown(struct socket_server *ss, uintptr_t opaque, int id) {
 
 // return -1 means failed
 // or return AF_INET or AF_INET6
+// 创建socket, 并绑定
+// 返回socket句柄
 static int
 do_bind(const char *host, int port, int protocol, int *family) {
 	int fd;
@@ -1567,6 +1574,8 @@ _failed_fd:
 	return -1;
 }
 
+//监听端口，调用listen函数，监听
+//返回socket句柄
 static int
 do_listen(const char * host, int port, int backlog) {
 	int family = 0;
@@ -1581,6 +1590,8 @@ do_listen(const char * host, int port, int backlog) {
 	return listen_fd;
 }
 
+//监听一个端口
+//返回内部id
 int 
 socket_server_listen(struct socket_server *ss, uintptr_t opaque, const char * addr, int port, int backlog) {
 	int fd = do_listen(addr, port, backlog);
@@ -1592,11 +1603,11 @@ socket_server_listen(struct socket_server *ss, uintptr_t opaque, const char * ad
 	if (id < 0) {
 		close(fd);
 		return id;
-	}
-	request.u.listen.opaque = opaque;
+	} 
+	request.u.listen.opaque = opaque; //服务地址
 	request.u.listen.id = id;
 	request.u.listen.fd = fd;
-	send_request(ss, &request, 'L', sizeof(request.u.listen));
+	send_request(ss, &request, 'L', sizeof(request.u.listen)); //进管道
 	return id;
 }
 
@@ -1614,6 +1625,9 @@ socket_server_bind(struct socket_server *ss, uintptr_t opaque, int fd) {
 	return id;
 }
 
+//发送'S'命令请求
+//对应的调用 start_socket 
+//将SOCKET_TYPE_PACCEPT或者SOCKET_TYPE_PLISTEN这两种类型socket,将其加入epoll管理，并更新其状态
 void 
 socket_server_start(struct socket_server *ss, uintptr_t opaque, int id) {
 	struct request_package request;

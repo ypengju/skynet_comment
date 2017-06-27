@@ -126,8 +126,8 @@ main(int argc, char *argv[]) {
 	}
 
 	luaS_initshr(); //初始化读写锁
-	skynet_globalinit(); //初始化skynet_node线程
-	skynet_env_init(); //申请内存空间，初始化skynet_env 自旋锁，Lua虚拟机
+	skynet_globalinit(); //初始化skynet_node结构体，设置主线程的特殊值
+	skynet_env_init(); //初始化skynet_env Lua虚拟机，用于存放config变量和全局节点数据
 
 	sigign(); //设置信号
 

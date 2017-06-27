@@ -11,30 +11,31 @@
 #define DEFAULT_SLOT_SIZE 4
 #define MAX_SLOT_SIZE 0x40000000
 
-//名称和handle对应
+//具名服务的名称和地址
 struct handle_name {
 	char * name; //名称
 	uint32_t handle; //handle
 };
 
-//handle存储
+//服务地址存储管理
 struct handle_storage {
 	struct rwlock lock; //读写锁
 
 	uint32_t harbor; //harbor地址
-	uint32_t handle_index; //下一个handle地址
-	int slot_size; //槽到大小
+	uint32_t handle_index; //未分配的下一个服务地址，服务地址从1开始
+	int slot_size; //槽的大小
 	struct skynet_context ** slot; //context数组，大小为slot_size
 	
-	int name_cap; //存储具名服务数组的大小
+	int name_cap;   //存储具名服务数组的大小，不够扩容，默认大小为2，每次增大一倍，最大为MAX_SLOT_SIZE
 	int name_count; //具名服务的数量
-	struct handle_name *name; //保存hand_name结构的数组，大小为name_cap
+	struct handle_name *name; //保存具名服务，大小为name_cap
 };
 
 static struct handle_storage *H = NULL;
 
-//注册处理器
-//分配handle地址，如果数组大小不够，扩容
+//分配服务地址
+//如果数组大小不够，扩容
+//返回服务地址，该地址包涵harbor地址
 uint32_t
 skynet_handle_register(struct skynet_context *ctx) {
 	struct handle_storage *s = H;
@@ -45,7 +46,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 		int i;
 		for (i=0;i<s->slot_size;i++) {
 			uint32_t handle = (i+s->handle_index) & HANDLE_MASK; //本地地址
-			int hash = handle & (s->slot_size-1);
+			int hash = handle & (s->slot_size-1); //哈希
 			if (s->slot[hash] == NULL) {
 				s->slot[hash] = ctx;
 				s->handle_index = handle + 1;
@@ -56,6 +57,8 @@ skynet_handle_register(struct skynet_context *ctx) {
 				return handle;
 			}
 		}
+
+		//存储数组满了，扩容
 		assert((s->slot_size*2 - 1) <= HANDLE_MASK);
 		struct skynet_context ** new_slot = skynet_malloc(s->slot_size * 2 * sizeof(struct skynet_context *));
 		memset(new_slot, 0, s->slot_size * 2 * sizeof(struct skynet_context *));
@@ -165,7 +168,7 @@ skynet_handle_findname(const char * name) {
 
 	uint32_t handle = 0;
 
-	//因为名称是按顺序存储的，所以类型二分查找
+	//因为名称是按顺序存储的，二分查找
 	int begin = 0;
 	int end = s->name_count - 1;
 	while (begin<=end) {
@@ -240,7 +243,7 @@ _insert_name(struct handle_storage *s, const char * name, uint32_t handle) {
 	return result;
 }
 
-//handle和名称挂钩
+//将handle服务地址和名称挂钩
 //handle 服务地址
 //name 名称
 const char * 
@@ -259,13 +262,13 @@ void
 skynet_handle_init(int harbor) {
 	assert(H==NULL);
 	struct handle_storage * s = skynet_malloc(sizeof(*H));
-	s->slot_size = DEFAULT_SLOT_SIZE;
-	s->slot = skynet_malloc(s->slot_size * sizeof(struct skynet_context *));
-	memset(s->slot, 0, s->slot_size * sizeof(struct skynet_context *));
+	s->slot_size = DEFAULT_SLOT_SIZE; //初始大小为4
+	s->slot = skynet_malloc(s->slot_size * sizeof(struct skynet_context *)); //分配内存
+	memset(s->slot, 0, s->slot_size * sizeof(struct skynet_context *)); //初始化
 
 	rwlock_init(&s->lock);
 	// reserve 0 for system
-	s->harbor = (uint32_t) (harbor & 0xff) << HANDLE_REMOTE_SHIFT;
+	s->harbor = (uint32_t) (harbor & 0xff) << HANDLE_REMOTE_SHIFT; //高8位位harbor地址
 	s->handle_index = 1;
 	s->name_cap = 2;
 	s->name_count = 0;
