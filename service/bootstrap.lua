@@ -9,6 +9,7 @@ skynet.start(function()
 
 	local standalone = skynet.getenv "standalone"
 
+	--启动launcher服务
 	local launcher = assert(skynet.launch("snlua","launcher"))
 	skynet.name(".launcher", launcher)
 

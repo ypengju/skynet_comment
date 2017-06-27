@@ -67,6 +67,7 @@ lnewpool(lua_State *L, int sz) {
 	return 1;
 }
 
+//创建一个新的socket buffer
 static int
 lnewbuffer(lua_State *L) {
 	struct socket_buffer * sb = lua_newuserdata(L, sizeof(*sb));	
@@ -471,6 +472,8 @@ lshutdown(lua_State *L) {
 	return 0;
 }
 
+//监听一个端口
+//调用的skynet_socket_listen
 static int
 llisten(lua_State *L) {
 	const char * host = luaL_checkstring(L,1);
@@ -581,6 +584,7 @@ lbind(lua_State *L) {
 	return 1;
 }
 
+//开始socket
 static int
 lstart(lua_State *L) {
 	struct skynet_context * ctx = lua_touserdata(L, lua_upvalueindex(1));

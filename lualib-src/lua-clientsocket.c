@@ -21,6 +21,7 @@
 
 #define CACHE_SIZE 0x1000	
 
+//客户端连接，
 static int
 lconnect(lua_State *L) {
 	const char * addr = luaL_checkstring(L, 1);

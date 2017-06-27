@@ -5,7 +5,7 @@ local assert = assert
 
 local socket = {}	-- api
 local buffer_pool = {}	-- store all message buffer object
-local socket_pool = setmetatable( -- store all socket object
+local socket_pool = setmetatable( -- store all socket object 保存所有的socket连接，并在销毁是，确保关闭所有socket
 	{},
 	{ __gc = function(p)
 		for id,v in pairs(p) do
@@ -19,6 +19,7 @@ local socket_pool = setmetatable( -- store all socket object
 
 local socket_message = {}
 
+--唤醒socket
 local function wakeup(s)
 	local co = s.co
 	if co then
@@ -27,6 +28,7 @@ local function wakeup(s)
 	end
 end
 
+--挂起一个socket
 local function suspend(s)
 	assert(not s.co)
 	s.co = coroutine.running()
@@ -75,6 +77,7 @@ socket_message[1] = function(id, size, data)
 end
 
 -- SKYNET_SOCKET_TYPE_CONNECT = 2
+--socket打开
 socket_message[2] = function(id, _ , addr)
 	local s = socket_pool[id]
 	if s == nil then
@@ -95,6 +98,7 @@ socket_message[3] = function(id)
 	wakeup(s)
 end
 
+-- 接受到客户端连接
 -- SKYNET_SOCKET_TYPE_ACCEPT = 4
 socket_message[4] = function(id, newid, addr)
 	local s = socket_pool[id]
@@ -102,7 +106,7 @@ socket_message[4] = function(id, newid, addr)
 		driver.close(newid)
 		return
 	end
-	s.callback(newid, addr)
+	s.callback(newid, addr) --调用start注册的回调函数
 end
 
 -- SKYNET_SOCKET_TYPE_ERROR = 5
@@ -162,24 +166,35 @@ skynet.register_protocol {
 	end
 }
 
+--入pool，并挂起socket
 local function connect(id, func)
+	--创建一个新的socket buffer
+	--[[
+	struct socket_buffer {
+		int size;
+		int offset;
+		struct buffer_node *head;
+		struct buffer_node *tail;
+	};
+	]]
 	local newbuffer
 	if func == nil then
 		newbuffer = driver.buffer()
 	end
+	--tcp连接保存的数据
 	local s = {
-		id = id,
+		id = id, --id
 		buffer = newbuffer,
-		connected = false,
+		connected = false, --标记是否连接
 		connecting = true,
 		read_required = false,
 		co = false,
-		callback = func,
-		protocol = "TCP",
+		callback = func,  --回掉函数
+		protocol = "TCP", --协议
 	}
 	assert(not socket_pool[id], "socket is not closed")
 	socket_pool[id] = s
-	suspend(s)
+	suspend(s) --挂起，等待标记状态切换处理完后唤醒
 	local err = s.connecting
 	s.connecting = nil
 	if s.connected then
@@ -204,6 +219,9 @@ function socket.stdin()
 	return socket.bind(0)
 end
 
+--调两次
+--监听后调用是给socket添加一个回调函数，并将socket状态从SOCKET_TYPE_PLISTEN改为SOCKET_TYPE_LISTEN,加入epoll
+--客户端连接回掉后调用，此时没有回掉函数
 function socket.start(id, func)
 	driver.start(id)
 	return connect(id, func)
@@ -221,6 +239,7 @@ local function close_fd(id, func)
 	end
 end
 
+--关闭一个socket
 function socket.shutdown(id)
 	close_fd(id, driver.shutdown)
 end
@@ -230,6 +249,7 @@ function socket.close_fd(id)
 	driver.close(id)
 end
 
+--关闭一个socket
 function socket.close(id)
 	local s = socket_pool[id]
 	if s == nil then
@@ -352,6 +372,8 @@ function socket.invalid(id)
 	return socket_pool[id] == nil
 end
 
+--监听一个端口
+--返回的是skynet内部的socket分配的id
 function socket.listen(host, port, backlog)
 	if port == nil then
 		host, port = string.match(host, "([^:]+):(.+)$")
@@ -437,6 +459,7 @@ end
 socket.sendto = assert(driver.udp_send)
 socket.udp_address = assert(driver.udp_address)
 
+--当 id 对应的 socket 上待发的数据超过 1M 字节后，系统将回调 callback 以示警告
 function socket.warning(id, callback)
 	local obj = socket_pool[id]
 	assert(obj)

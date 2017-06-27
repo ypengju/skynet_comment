@@ -13,7 +13,9 @@ local profile = require "profile"
 local coroutine_resume = profile.resume
 local coroutine_yield = profile.yield
 
-local proto = {}
+local proto = {} --注册的消息类型
+
+--skynet支持的消息类型
 local skynet = {
 	-- read skynet.h
 	PTYPE_TEXT = 0,
@@ -533,6 +535,7 @@ function skynet.dispatch_message(...)
 	assert(succ, tostring(err))
 end
 
+--创建一个服务
 function skynet.newservice(name, ...)
 	return skynet.call(".launcher", "lua" , "LAUNCH", "snlua", name, ...)
 end

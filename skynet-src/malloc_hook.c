@@ -218,6 +218,7 @@ dump_c_mem() {
 	skynet_error(NULL, "+total: %zdkb",total >> 10);
 }
 
+//拷贝字符串
 char *
 skynet_strdup(const char *str) {
 	size_t sz = strlen(str);
