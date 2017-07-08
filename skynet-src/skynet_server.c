@@ -53,10 +53,10 @@ struct skynet_context {
 	char result[32];
 	uint32_t handle; //分配的服务地址
 	int session_id;
-	int ref; // 引用技术 初始值2 等于0时销毁该服务
+	int ref; // skynet_context本身的引用计数 初始值2 等于0时销毁该服务，释放内存
 	int message_count; //处理消息数量
 	bool init; //标记 服务是否已经初始化过了
-	bool endless;
+	bool endless; //标记 该服务是不是死循环了
 	bool profile; //是否打开性能统计
 
 	CHECKCALLING_DECL //自旋锁
@@ -249,12 +249,12 @@ skynet_context_push(uint32_t handle, struct skynet_message *message) {
 	if (ctx == NULL) {
 		return -1;
 	}
-	skynet_mq_push(ctx->queue, message); //往目标地址的私有消息队列中，压入消息
-	skynet_context_release(ctx); //引用技术减1
-
+	skynet_mq_push(ctx->queue, message); //往目标地址的消息队列中，压入消息
+	skynet_context_release(ctx); //引用计数减1
 	return 0;
 }
 
+//标记服务处于死循环了
 void 
 skynet_context_endless(uint32_t handle) {
 	struct skynet_context * ctx = skynet_handle_grab(handle);
@@ -315,15 +315,15 @@ skynet_context_dispatchall(struct skynet_context * ctx) {
 //消息分发
 struct message_queue * 
 skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue *q, int weight) {
+	//q为上次循环pop出来的消息队列
 	if (q == NULL) {
 		q = skynet_globalmq_pop(); //从全局消息队列头，取出一个消息队列
 		if (q==NULL)
-			return NULL;
+			return NULL; //说明没有要处理的，会挂起线程
 	}
 
-	//通过服务地址，找到服务环境
+	//通过消息队列找到服务地址，然后再找到服务结构
 	uint32_t handle = skynet_mq_handle(q);
-
 	//如果该消息队列的服务已经不存在，释放消息队列
 	struct skynet_context * ctx = skynet_handle_grab(handle);
 	if (ctx == NULL) {
@@ -336,6 +336,7 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 	struct skynet_message msg;
 
 	for (i=0;i<n;i++) {
+		//从消息队列中pop出来一个消息
 		if (skynet_mq_pop(q,&msg)) {
 			skynet_context_release(ctx);
 			return skynet_globalmq_pop();
@@ -343,25 +344,30 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 			n = skynet_mq_length(q);
 			n >>= weight;
 		}
+
+		//检查消息队列是否过载
 		int overload = skynet_mq_overload(q);
 		if (overload) {
 			skynet_error(ctx, "May overload, message queue length = %d", overload);
 		}
 
-		//消息的source位来源地址，队列的所在context的handle就为目标地址
+		//消息的source为来源地址，队列的所在context的handle就为目标地址
+		//在监控其中记录消息的流向
 		skynet_monitor_trigger(sm, msg.source , handle);
 
 		//调用服务内的消息回掉函数
 		if (ctx->cb == NULL) {
-			skynet_free(msg.data);
+			skynet_free(msg.data); //该消息的目标服务未注册回掉函数，释放掉该消息
 		} else {
-			dispatch_message(ctx, &msg);
+			dispatch_message(ctx, &msg); //调用消息的回掉函数，处理消息
 		}
-
+		//消息处理完成，重置监控中的消息流向记录
 		skynet_monitor_trigger(sm, 0,0);
 	}
 
 	assert(q == ctx->queue);
+	//如果全局消息队列不为空，将q重新压入全局队列，并返回下一个消息队列，进行分发处理
+	//如果全局队列为空了或者阻塞了，则继续处理该消息队列中的消息
 	struct message_queue *nq = skynet_globalmq_pop();
 	if (nq) {
 		// If global mq is not empty , push q back, and return next queue (nq)
@@ -369,7 +375,7 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 		skynet_globalmq_push(q);
 		q = nq;
 	} 
-	skynet_context_release(ctx);
+	skynet_context_release(ctx); //服务的引用计算减1
 
 	return q;
 }

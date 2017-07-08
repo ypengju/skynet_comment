@@ -44,6 +44,7 @@ handle_hup(int signal) {
 	}
 }
 
+//检查是否还有服务，无服务是，break 退出循环
 #define CHECK_ABORT if (skynet_context_total()==0) break;
 
 //创建线程
@@ -55,6 +56,7 @@ create_thread(pthread_t *thread, void *(*start_routine) (void *), void *arg) {
 	}
 }
 
+//唤醒，给挂起线程发送信号，一次唤醒一个
 static void
 wakeup(struct monitor *m, int busy) {
 	if (m->sleep >= m->count - busy) {
@@ -76,6 +78,7 @@ thread_socket(void *p) {
 			CHECK_ABORT
 			continue;
 		}
+		//全部工作线程挂起时，则需要唤醒一个工作线程，处理socket消息
 		wakeup(m,0);
 	}
 	return NULL;
@@ -106,6 +109,7 @@ thread_monitor(void *p) {
 		// #define CHECK_ABORT if (skynet_context_total()==0) break;
 		CHECK_ABORT
 
+		//监测每个工作线程
 		for (i=0;i<n;i++) {
 			skynet_monitor_check(m->m[i]);
 		}
@@ -122,7 +126,6 @@ thread_monitor(void *p) {
 static void
 signal_hup() {
 	// make log file reopen
-
 	struct skynet_message smsg;
 	smsg.source = 0;
 	smsg.session = 0;
@@ -141,8 +144,8 @@ thread_timer(void *p) {
 	for (;;) {
 		skynet_updatetime();
 		CHECK_ABORT
-		wakeup(m,m->count-1);
-		usleep(2500);
+		wakeup(m,m->count-1); //只要有挂起的线程，就唤醒一个
+		usleep(2500); //挂起2.5毫秒
 		if (SIG) {
 			signal_hup();
 			SIG = 0;
@@ -151,8 +154,9 @@ thread_timer(void *p) {
 	// wakeup socket thread
 	skynet_socket_exit();
 	// wakeup all worker thread
+	//标记退出，唤醒所有工作线程，使工作线程结束循环
 	pthread_mutex_lock(&m->mutex);
-	m->quit = 1;
+	m->quit = 1; 
 	pthread_cond_broadcast(&m->cond);
 	pthread_mutex_unlock(&m->mutex);
 	return NULL;
@@ -169,6 +173,7 @@ thread_worker(void *p) {
 	skynet_initthread(THREAD_WORKER);
 	struct message_queue * q = NULL;
 	while (!m->quit) {
+		//分发消息，没消息处理就挂起
 		q = skynet_context_message_dispatch(sm, q, weight);
 		if (q == NULL) {
 			if (pthread_mutex_lock(&m->mutex) == 0) {
@@ -176,7 +181,7 @@ thread_worker(void *p) {
 				// "spurious wakeup" is harmless,
 				// because skynet_context_message_dispatch() can be call at any time.
 				if (!m->quit)
-					pthread_cond_wait(&m->cond, &m->mutex);
+					pthread_cond_wait(&m->cond, &m->mutex); //挂起当前线程，等待条件，并解锁互斥量。当被唤醒返回时，再次锁住互斥量
 				-- m->sleep;
 				if (pthread_mutex_unlock(&m->mutex)) {
 					fprintf(stderr, "unlock mutex error");
@@ -264,10 +269,11 @@ bootstrap(struct skynet_context * logger, const char * cmdline) {
 
 void 
 skynet_start(struct skynet_config * config) {
+	//注册SIGHUP信号处理器
 	// register SIGHUP for log file reopen
 	struct sigaction sa;
-	sa.sa_handler = &handle_hup;
-	sa.sa_flags = SA_RESTART;
+	sa.sa_handler = &handle_hup; //信号处理器
+	sa.sa_flags = SA_RESTART; //自动重启由信号处理器程序中断的系统调用，信号处理后，继续原来的系统调用
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGHUP, &sa, NULL);
 

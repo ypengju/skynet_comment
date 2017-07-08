@@ -29,7 +29,7 @@ skynet_monitor_delete(struct skynet_monitor *sm) {
 	skynet_free(sm);
 }
 
-//触发监测器，记录消息原地址和目标地址
+//触发监控器，记录消息原地址和目标地址
 void 
 skynet_monitor_trigger(struct skynet_monitor *sm, uint32_t source, uint32_t destination) {
 	sm->source = source;
@@ -42,7 +42,7 @@ void
 skynet_monitor_check(struct skynet_monitor *sm) {
 	if (sm->version == sm->check_version) {
 		if (sm->destination) {
-			skynet_context_endless(sm->destination);
+			skynet_context_endless(sm->destination); //标记消息的处理服务，处于死循环了
 			skynet_error(NULL, "A message from [ :%08x ] to [ :%08x ] maybe in an endless loop (version = %d)", sm->source , sm->destination, sm->version);
 		}
 	} else {

@@ -21,7 +21,7 @@
 //消息队列结构
 struct message_queue {
 	struct spinlock lock; //自旋锁
-	uint32_t handle; //消息处理
+	uint32_t handle; //服务地址
 	int cap; //队列的大小 默认64
 	int head; //第一个消息 index
 	int tail; //最后一个消息 index
@@ -145,7 +145,7 @@ skynet_mq_overload(struct message_queue *q) {
 	return 0;
 }
 
-//消息出消息队列
+//从消息队列中取出一个消息，存放在参数message
 int
 skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 	int ret = 1;
